@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: scrapper_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pokemon_scraper
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./backend
+    container_name: scrapper_api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/pokemon_scraper
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker-fetch:
+    build: ./backend
+    container_name: scrapper_worker_fetch
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker", "fetch"]
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/pokemon_scraper
+      WORKER_CONCURRENCY: 5
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker-save:
+    build: ./backend
+    container_name: scrapper_worker_save
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker", "save"]
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/pokemon_scraper
+      WORKER_CONCURRENCY: 5
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
