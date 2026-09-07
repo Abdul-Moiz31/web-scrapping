@@ -1,4 +1,5 @@
 from app.http import fetch
+from app.sources.diffing import field_diff
 
 LIST_URL = "https://rickandmortyapi.com/api/character"
 
@@ -26,3 +27,10 @@ def extract(task: dict) -> dict:
         "species": character["species"],
         "image_url": character["image"],
     }
+
+
+def detect_changes(old_data: dict, new_data: dict) -> dict:
+    """No field specified -- status/species are the fields likely to move
+    for a given character, but nothing rules out others, so any difference
+    counts (see field_diff's default)."""
+    return field_diff(old_data, new_data)

@@ -178,3 +178,13 @@ def extract(task: dict) -> dict:
     # a second Jsonb inside that breaks its json.dumps. The save worker
     # wraps "data" in Jsonb itself, right before the INSERT.
     return {"source_id": task["source"], "item_key": _item_key(task["item"]), "data": task["item"]}
+
+
+def detect_changes(old_data: dict, new_data: dict) -> dict:
+    """A custom source's shape is arbitrary JSON, unknown ahead of time --
+    same reasoning as _item_key above, so field-level comparison isn't an
+    option. Deep-equal the whole payload and report it as one unit."""
+    old_payload, new_payload = old_data.get("data"), new_data.get("data")
+    if old_payload == new_payload:
+        return {}
+    return {"data": {"old": old_payload, "new": new_payload}}

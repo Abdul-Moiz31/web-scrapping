@@ -1,4 +1,5 @@
 from app.http import fetch
+from app.sources.diffing import field_diff
 
 LIST_URL = "https://pokeapi.co/api/v2/pokemon?limit=20"
 
@@ -25,3 +26,9 @@ def extract(task: dict) -> dict:
         "base_experience": detail["base_experience"],
         "sprite_url": detail["sprites"]["front_default"],
     }
+
+
+def detect_changes(old_data: dict, new_data: dict) -> dict:
+    """No field is special-cased -- a Pokemon's stats are static, so any
+    difference at all (were the API to ever change one) is worth flagging."""
+    return field_diff(old_data, new_data)

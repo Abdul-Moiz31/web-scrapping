@@ -1,4 +1,10 @@
 from app.http import fetch
+from app.sources.diffing import field_diff
+
+# Only a price move counts as a "change" worth surfacing -- market_cap rides
+# on the same price and rank/volume-derived fields shift on essentially
+# every poll, which would make the changes feed noise rather than signal.
+CHANGE_FIELDS = ("current_price",)
 
 # REST Countries (the source originally specified for this slot) has been
 # fully deprecated -- v3.1 and v5 both now return a 200 with an error body
@@ -25,3 +31,7 @@ def extract(task: dict) -> dict:
         "market_cap": coin["market_cap"],
         "image_url": coin["image"],
     }
+
+
+def detect_changes(old_data: dict, new_data: dict) -> dict:
+    return field_diff(old_data, new_data, CHANGE_FIELDS)
