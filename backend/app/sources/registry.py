@@ -16,9 +16,19 @@ class Source:
     max_requests_per_minute: int
     discover: Callable[[], list[dict]]
     extract: Callable[[dict], dict]
+    # Stage 14: compares the last-saved row to the just-saved one and returns
+    # only the fields that differ (empty dict = unchanged). Dispatched here
+    # the same way discover/extract are, so each source keeps its own notion
+    # of "changed" instead of one generic diff.
+    detect_changes: Callable[[dict, dict], dict]
     # Natural-key column(s) for this source's table -- the ON CONFLICT target
     # that makes re-scraping an upsert instead of a duplicate insert.
     conflict_columns: tuple[str, ...]
+    # Stage 13: append-only history table this source's rows are copied into
+    # on every save, and the FK column on that table pointing back at the
+    # row's id in table_name.
+    history_table: str
+    history_fk_column: str
     is_custom: bool = False
     # Custom sources only (Stage 10) -- what the last discover run found
     # about this API's pagination. None for typed sources and for a custom
@@ -35,7 +45,10 @@ SOURCES: dict[str, Source] = {
         max_requests_per_minute=60,
         discover=pokemon.discover,
         extract=pokemon.extract,
+        detect_changes=pokemon.detect_changes,
         conflict_columns=("name",),
+        history_table="pokemon_history",
+        history_fk_column="pokemon_id",
     ),
     "rickandmorty": Source(
         id="rickandmorty",
@@ -45,7 +58,10 @@ SOURCES: dict[str, Source] = {
         max_requests_per_minute=30,
         discover=rickandmorty.discover,
         extract=rickandmorty.extract,
+        detect_changes=rickandmorty.detect_changes,
         conflict_columns=("external_id",),
+        history_table="rick_and_morty_history",
+        history_fk_column="rick_and_morty_id",
     ),
     "coingecko": Source(
         id="coingecko",
@@ -55,7 +71,10 @@ SOURCES: dict[str, Source] = {
         max_requests_per_minute=30,
         discover=coingecko.discover,
         extract=coingecko.extract,
+        detect_changes=coingecko.detect_changes,
         conflict_columns=("coin_id",),
+        history_table="coins_history",
+        history_fk_column="coins_id",
     ),
 }
 
@@ -70,7 +89,10 @@ def _row_to_custom_source(row: tuple) -> Source:
         max_requests_per_minute=max_rpm,
         discover=lambda captured_url=url, captured_id=source_id: custom.discover(captured_url, captured_id),
         extract=custom.extract,
+        detect_changes=custom.detect_changes,
         conflict_columns=("source_id", "item_key"),
+        history_table="custom_source_rows_history",
+        history_fk_column="custom_source_rows_id",
         is_custom=True,
         pagination_status=pagination_status,
     )
