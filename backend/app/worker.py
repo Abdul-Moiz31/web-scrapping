@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import threading
@@ -5,6 +6,7 @@ import time
 
 from psycopg.types.json import Jsonb
 
+from app.changes import has_changed, row_identifier
 from app.db import get_connection, push_task, push_tasks
 from app.queue import ack_task, nack_task, pop_task, reschedule_task
 from app.rate_limit import is_allowed
@@ -112,7 +114,8 @@ def save_worker_loop() -> None:
             set_clause = f"{set_clause}, updated_at = NOW()" if set_clause else "updated_at = NOW()"
             sql = (
                 f"INSERT INTO {table_name} ({column_list}) VALUES ({placeholders}) "
-                f"ON CONFLICT ({', '.join(source.conflict_columns)}) DO UPDATE SET {set_clause}"
+                f"ON CONFLICT ({', '.join(source.conflict_columns)}) DO UPDATE SET {set_clause} "
+                f"RETURNING *"
             )
 
             # Claim the task before writing the result: if lock_token no
@@ -134,6 +137,51 @@ def save_worker_loop() -> None:
                         )
                         continue
                     cur.execute(sql, row)
+                    saved_row = dict(zip((d[0] for d in cur.description), cur.fetchone()))
+
+                    # Stage 14: diff against the most recent history entry for
+                    # this row (none yet, for a brand-new row) rather than
+                    # writing history unconditionally -- an unchanged row
+                    # skips both the history insert and the changes-feed
+                    # entry, which is what keeps *_history from growing on
+                    # every re-scrape of data that hasn't moved.
+                    cur.execute(
+                        f"SELECT data FROM {source.history_table} "
+                        f"WHERE {source.history_fk_column} = %s ORDER BY recorded_at DESC LIMIT 1",
+                        (saved_row["id"],),
+                    )
+                    previous = cur.fetchone()
+
+                    if previous is None:
+                        # First save ever for this row -- nothing to diff
+                        # against yet, so this becomes the baseline history
+                        # entry with no change event.
+                        changed, changed_fields = False, {}
+                        write_history = True
+                    else:
+                        changed, changed_fields = has_changed(source.id, previous[0], saved_row)
+                        write_history = changed
+
+                    if write_history:
+                        cur.execute(
+                            f"INSERT INTO {source.history_table} ({source.history_fk_column}, data) VALUES (%s, %s)",
+                            (
+                                saved_row["id"],
+                                # default=str handles the timestamp columns RETURNING * hands back
+                                # (updated_at, fetched_at, ...), which json.dumps can't serialize directly.
+                                Jsonb(saved_row, dumps=lambda obj: json.dumps(obj, default=str)),
+                            ),
+                        )
+
+                    if changed:
+                        cur.execute(
+                            "INSERT INTO changes (source_id, row_identifier, changed_fields) VALUES (%s, %s, %s)",
+                            (
+                                source.id,
+                                row_identifier(source, saved_row),
+                                Jsonb(changed_fields, dumps=lambda obj: json.dumps(obj, default=str)),
+                            ),
+                        )
                 conn.commit()
         except Exception as e:
             if not nack_task(task["id"], task["lock_token"], str(e)):
