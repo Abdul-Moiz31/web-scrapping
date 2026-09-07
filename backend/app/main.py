@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -194,6 +196,23 @@ def source_rows(source_id: str):
     return [dict(zip(columns, row)) for row in rows]
 
 
+@app.get("/sources/{source_id}/rows/{row_id}/history")
+def row_history(source_id: str, row_id: int):
+    source = _get_source_or_404(source_id)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT id, data, recorded_at FROM {source.history_table} "
+                f"WHERE {source.history_fk_column} = %s ORDER BY recorded_at DESC",
+                (row_id,),
+            )
+            rows = cur.fetchall()
+    return [
+        {"id": history_id, "data": data, "recorded_at": recorded_at.isoformat() if recorded_at else None}
+        for history_id, data, recorded_at in rows
+    ]
+
+
 def _count_rows(cur, source) -> int:
     if source.table_name == CUSTOM_TABLE:
         cur.execute("SELECT COUNT(*) FROM custom_source_rows WHERE source_id = %s", (source.id,))
@@ -317,6 +336,44 @@ def failed_tasks():
     return [
         {"id": r[0], "queue_name": r[1], "payload": r[2], "attempts": r[3], "last_error": r[4]}
         for r in rows
+    ]
+
+
+@app.get("/changes")
+def list_changes(source_id: Optional[str] = None, since: Optional[datetime] = None):
+    """The changes feed (Stage 14) -- most recent first, optionally scoped
+    to one source and/or a lower bound on detected_at."""
+    where = []
+    params: dict = {}
+    if source_id is not None:
+        where.append("source_id = %(source_id)s")
+        params["source_id"] = source_id
+    if since is not None:
+        where.append("detected_at >= %(since)s")
+        params["since"] = since
+    where_clause = f"WHERE {' AND '.join(where)}" if where else ""
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT id, source_id, row_identifier, changed_fields, detected_at
+                FROM changes
+                {where_clause}
+                ORDER BY detected_at DESC
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+    return [
+        {
+            "id": change_id,
+            "source_id": change_source_id,
+            "row_identifier": row_identifier,
+            "changed_fields": changed_fields,
+            "detected_at": detected_at.isoformat() if detected_at else None,
+        }
+        for change_id, change_source_id, row_identifier, changed_fields, detected_at in rows
     ]
 
 
