@@ -1,18 +1,32 @@
+from app.db import get_connection
 from app.http import fetch
 from app.sources.diffing import field_diff
 
 LIST_URL = "https://pokeapi.co/api/v2/pokemon?limit=20"
 
 
+def _known_names() -> set[str]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT name FROM pokemon")
+            return {row[0] for row in cur.fetchall()}
+
+
 def discover() -> list[dict]:
-    """Walk every page of the list endpoint. The list only has name+url, so
-    each task just carries the detail URL for extract() to fetch."""
+    """Walk every page of the list endpoint -- cheap, since the list only
+    has name+url and pagination is the only way to see what currently
+    exists. But a pokemon's own detail data (height/weight/etc.) never
+    changes once fetched, so re-hitting all ~1300 detail pages every run for
+    data we already have is pure waste. Skip extract tasks for names already
+    in the table; only new entries pay the detail-fetch cost."""
+    known = _known_names()
     tasks = []
     url = LIST_URL
     while url:
         data = fetch(url).json()
         for entry in data["results"]:
-            tasks.append({"type": "extract", "url": entry["url"]})
+            if entry["name"] not in known:
+                tasks.append({"type": "extract", "url": entry["url"]})
         url = data["next"]
     return tasks
 
