@@ -112,6 +112,54 @@ def ensure_dedup_migration() -> None:
         conn.commit()
 
 
+def ensure_history_migration() -> None:
+    """Stage 13: one append-only *_history table per source table, created
+    idempotently here for the same reason as the tables above -- an
+    already-initialized dev DB never re-runs schema.sql."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            for table, fk_column, parent_table in [
+                ("pokemon_history", "pokemon_id", "pokemon"),
+                ("rick_and_morty_history", "rick_and_morty_id", "rick_and_morty"),
+                ("coins_history", "coins_id", "coins"),
+                ("custom_source_rows_history", "custom_source_rows_id", "custom_source_rows"),
+            ]:
+                cur.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS {table} (
+                        id SERIAL PRIMARY KEY,
+                        {fk_column} INT NOT NULL REFERENCES {parent_table}(id),
+                        data JSONB NOT NULL,
+                        recorded_at TIMESTAMP DEFAULT NOW()
+                    )
+                    """
+                )
+        conn.commit()
+
+
+def ensure_changes_migration() -> None:
+    """Stage 14: the changes feed table, created idempotently here for the
+    same reason as the tables above -- an already-initialized dev DB never
+    re-runs schema.sql."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS changes (
+                    id SERIAL PRIMARY KEY,
+                    source_id TEXT NOT NULL,
+                    row_identifier TEXT NOT NULL,
+                    changed_fields JSONB NOT NULL,
+                    detected_at TIMESTAMP DEFAULT NOW()
+                )
+                """
+            )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS changes_source_detected_idx ON changes (source_id, detected_at DESC)"
+            )
+        conn.commit()
+
+
 def push_tasks(queue_name: str, payloads: list[dict]) -> None:
     with get_connection() as conn:
         with conn.cursor() as cur:

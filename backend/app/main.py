@@ -4,7 +4,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
-from app.db import ensure_custom_source_tables, ensure_dedup_migration, get_connection, push_task
+from app.db import (
+    ensure_changes_migration,
+    ensure_custom_source_tables,
+    ensure_dedup_migration,
+    ensure_history_migration,
+    get_connection,
+    push_task,
+)
 from app.scheduler import (
     effective_cron_schedule,
     reschedule,
@@ -40,6 +47,8 @@ class CustomSourceCreate(BaseModel):
 async def lifespan(app: FastAPI):
     ensure_custom_source_tables()
     ensure_dedup_migration()
+    ensure_history_migration()
+    ensure_changes_migration()
     start_scheduler()
     yield
     scheduler.shutdown()
