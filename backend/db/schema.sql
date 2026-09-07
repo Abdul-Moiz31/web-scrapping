@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     attempts INT NOT NULL DEFAULT 0,
     last_error TEXT,
     locked_at TIMESTAMP,
+    lock_token UUID,
     run_after TIMESTAMP DEFAULT NOW(),
     created_at TIMESTAMP DEFAULT NOW()
 );

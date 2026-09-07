@@ -36,7 +36,7 @@ def fetch_worker_loop() -> None:
         if source is None:
             # Source was deleted (e.g. a custom source removed) while its
             # tasks were still queued -- drop them rather than crash-looping.
-            ack_task(task["id"])
+            ack_task(task["id"], task["lock_token"])
             continue
 
         if not is_allowed(source_id, source.max_requests_per_minute):
@@ -52,13 +52,35 @@ def fetch_worker_loop() -> None:
                 new_tasks = source.discover()
                 for new_task in new_tasks:
                     new_task["source"] = source_id
-                push_tasks("fetch_tasks", new_tasks)
+                result = ("fetch_tasks", new_tasks)
             elif task["payload"]["type"] == "extract":
                 row = source.extract(task["payload"])
-                push_task("save_tasks", {"source": source_id, "row": row})
-            ack_task(task["id"])
+                result = ("save_tasks", {"source": source_id, "row": row})
+            else:
+                result = None
+
+            # Only push the result once we've confirmed this worker still
+            # holds the claim -- otherwise another worker already reclaimed
+            # the task and its own ack/nack (or this push) would duplicate
+            # work in flight, not just a row later cleaned up by the upsert.
+            if ack_task(task["id"], task["lock_token"]):
+                if result is not None:
+                    queue_name, payload = result
+                    if queue_name == "fetch_tasks":
+                        push_tasks(queue_name, payload)
+                    else:
+                        push_task(queue_name, payload)
+            else:
+                print(
+                    f"task {task['id']} was reclaimed before this worker finished "
+                    "-- discarding this worker's result"
+                )
         except Exception as e:
-            nack_task(task["id"], str(e))
+            if not nack_task(task["id"], task["lock_token"], str(e)):
+                print(
+                    f"task {task['id']} was reclaimed before this worker's failure "
+                    "-- discarding this worker's nack"
+                )
 
 
 def save_worker_loop() -> None:
@@ -72,7 +94,7 @@ def save_worker_loop() -> None:
             payload = task["payload"]
             source = get_source(payload["source"])
             if source is None:
-                ack_task(task["id"])
+                ack_task(task["id"], task["lock_token"])
                 continue
             table_name = source.table_name
             row = payload["row"]
@@ -93,15 +115,32 @@ def save_worker_loop() -> None:
                 f"ON CONFLICT ({', '.join(source.conflict_columns)}) DO UPDATE SET {set_clause}"
             )
 
+            # Claim the task before writing the result: if lock_token no
+            # longer matches, another worker reclaimed it, so this worker's
+            # row must be discarded rather than written -- checking the
+            # claim only after the insert would let the write through even
+            # though the task is no longer this worker's to finish.
             with get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(sql, row)
                     cur.execute(
-                        "UPDATE tasks SET status = 'done' WHERE id = %s", (task["id"],)
+                        "UPDATE tasks SET status = 'done' WHERE id = %s AND lock_token = %s",
+                        (task["id"], task["lock_token"]),
                     )
+                    if cur.rowcount == 0:
+                        conn.rollback()
+                        print(
+                            f"task {task['id']} was reclaimed before this worker finished "
+                            "-- discarding this worker's result"
+                        )
+                        continue
+                    cur.execute(sql, row)
                 conn.commit()
         except Exception as e:
-            nack_task(task["id"], str(e))
+            if not nack_task(task["id"], task["lock_token"], str(e)):
+                print(
+                    f"task {task['id']} was reclaimed before this worker's failure "
+                    "-- discarding this worker's nack"
+                )
 
 
 def run_concurrent(loop_fn, concurrency: int) -> None:
