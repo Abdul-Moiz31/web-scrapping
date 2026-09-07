@@ -38,6 +38,14 @@ export type HistoryEntry = {
   recorded_at: string | null;
 };
 
+export type Change = {
+  id: number;
+  source_id: string;
+  row_identifier: string;
+  changed_fields: Record<string, { old: unknown; new: unknown }>;
+  detected_at: string | null;
+};
+
 export type SourceStats = {
   source_id: string;
   row_count: number;

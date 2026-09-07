@@ -7,7 +7,7 @@ import { ReactNode } from "react";
 import { useSources } from "@/lib/SourcesContext";
 import { colorForSource, tint } from "@/lib/theme";
 
-import { DashboardIcon, PlusIcon, SettingsIcon } from "./icons";
+import { DashboardIcon, PlusIcon, PulseIcon, SettingsIcon } from "./icons";
 
 function NavLink({
   href,
@@ -51,6 +51,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
       <NavLink href="/" active={pathname === "/"}>
         <DashboardIcon /> Overview
+      </NavLink>
+
+      <NavLink href="/changes" active={pathname === "/changes"}>
+        <PulseIcon /> Changes
       </NavLink>
 
       <div>

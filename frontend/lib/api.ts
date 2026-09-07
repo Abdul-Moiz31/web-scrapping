@@ -1,4 +1,4 @@
-import { ActivitySeries, FailedTask, HistoryEntry, RateLimit, Row, SourceInfo, SourceStats, TaskSummary } from "./types";
+import { ActivitySeries, Change, FailedTask, HistoryEntry, RateLimit, Row, SourceInfo, SourceStats, TaskSummary } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -63,6 +63,13 @@ export const api = {
   taskSummary: () => getJSON<TaskSummary>("/tasks/summary"),
   failedTasks: () => getJSON<FailedTask[]>("/tasks/failed"),
   activity: (minutes = 30) => getJSON<ActivitySeries>(`/activity?minutes=${minutes}`),
+  changes: (params: { sourceId?: string; since?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.sourceId) query.set("source_id", params.sourceId);
+    if (params.since) query.set("since", params.since);
+    const qs = query.toString();
+    return getJSON<Change[]>(`/changes${qs ? `?${qs}` : ""}`);
+  },
   updateSchedule: (id: string, cron_schedule: string) =>
     putJSON<{ source_id: string; cron_schedule: string }>(`/sources/${id}/schedule`, {
       cron_schedule,
