@@ -1,5 +1,10 @@
+import { useState } from "react";
+
 import { Row } from "@/lib/types";
 import { tint } from "@/lib/theme";
+
+import { ClockIcon } from "./icons";
+import { HistoryModal } from "./HistoryModal";
 
 const IMAGE_KEYS = ["sprite_url", "image_url", "icon_url", "photo_url", "avatar", "avatar_url", "thumbnail", "picture", "logo"];
 const IMAGE_URL_PATTERN = /\.(png|jpe?g|gif|webp|svg|avif)(\?.*)?$/i;
@@ -59,7 +64,18 @@ function formatStatValue(key: string, value: unknown): string {
   return String(value);
 }
 
-export function DataCard({ row, accent, highlighted }: { row: Row; accent: string; highlighted?: boolean }) {
+export function DataCard({
+  row,
+  accent,
+  highlighted,
+  sourceId,
+}: {
+  row: Row;
+  accent: string;
+  highlighted?: boolean;
+  sourceId: string;
+}) {
+  const [showHistory, setShowHistory] = useState(false);
   const keys = Object.keys(row).filter((k) => k !== "id");
   const imageKey = keys.find((k) => isImageKey(k, row[k]));
   const titleKey = TITLE_KEYS.find((k) => keys.includes(k));
@@ -120,6 +136,13 @@ export function DataCard({ row, accent, highlighted }: { row: Row; accent: strin
               {String(row[badgeKey])}
             </span>
           ) : null}
+          <button
+            onClick={() => setShowHistory(true)}
+            title="View history"
+            className="ml-auto flex-shrink-0 text-gray-300 hover:text-gray-500"
+          >
+            <ClockIcon className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         <div className="grid grid-cols-2 gap-x-3 gap-y-2">
@@ -135,6 +158,15 @@ export function DataCard({ row, accent, highlighted }: { row: Row; accent: strin
           ))}
         </div>
       </div>
+
+      {showHistory ? (
+        <HistoryModal
+          sourceId={sourceId}
+          rowId={Number(row.id)}
+          title={titleKey ? String(row[titleKey]) : `#${String(row.id)}`}
+          onClose={() => setShowHistory(false)}
+        />
+      ) : null}
     </div>
   );
 }

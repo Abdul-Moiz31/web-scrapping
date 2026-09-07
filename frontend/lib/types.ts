@@ -32,6 +32,12 @@ export type FailedTask = {
   last_error: string | null;
 };
 
+export type HistoryEntry = {
+  id: number;
+  data: Record<string, unknown>;
+  recorded_at: string | null;
+};
+
 export type SourceStats = {
   source_id: string;
   row_count: number;

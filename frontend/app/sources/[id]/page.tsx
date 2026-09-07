@@ -226,9 +226,9 @@ export default function SourceDetailPage() {
       <FailedTasksPanel tasks={failedTasks} />
 
       {source.is_custom ? (
-        <JsonRowGrid rows={rows} accent={accent} highlightedIds={highlightedIds} />
+        <JsonRowGrid rows={rows} accent={accent} highlightedIds={highlightedIds} sourceId={sourceId} />
       ) : (
-        <DataCardGrid rows={rows} accent={accent} highlightedIds={highlightedIds} />
+        <DataCardGrid rows={rows} accent={accent} highlightedIds={highlightedIds} sourceId={sourceId} />
       )}
     </div>
   );

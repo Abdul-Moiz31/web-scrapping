@@ -13,10 +13,12 @@ export function DataCardGrid({
   rows,
   accent,
   highlightedIds,
+  sourceId,
 }: {
   rows: Row[];
   accent: string;
   highlightedIds?: Set<string>;
+  sourceId: string;
 }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -79,6 +81,7 @@ export function DataCardGrid({
                 row={row}
                 accent={accent}
                 highlighted={highlightedIds?.has(String(row.id))}
+                sourceId={sourceId}
               />
             ))}
           </div>

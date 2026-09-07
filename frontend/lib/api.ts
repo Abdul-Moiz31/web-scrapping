@@ -1,4 +1,4 @@
-import { ActivitySeries, FailedTask, RateLimit, Row, SourceInfo, SourceStats, TaskSummary } from "./types";
+import { ActivitySeries, FailedTask, HistoryEntry, RateLimit, Row, SourceInfo, SourceStats, TaskSummary } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -52,6 +52,8 @@ async function del<T>(path: string): Promise<T> {
 export const api = {
   listSources: () => getJSON<SourceInfo[]>("/sources"),
   sourceRows: (id: string) => getJSON<Row[]>(`/sources/${id}/rows`),
+  rowHistory: (id: string, rowId: number) =>
+    getJSON<HistoryEntry[]>(`/sources/${id}/rows/${rowId}/history`),
   sourceCount: (id: string) => getJSON<{ source_id: string; count: number }>(`/sources/${id}/count`),
   sourceStats: (id: string) => getJSON<SourceStats>(`/sources/${id}/stats`),
   lastUpdated: (id: string) => getJSON<{ last_updated: string | null }>(`/sources/${id}/last-updated`),
