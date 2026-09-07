@@ -13,3 +13,5 @@ frontend/tsconfig.tsbuildinfo
 
 # OS
 .DS_Store
+config.bat
+node_modules
