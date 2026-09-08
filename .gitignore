@@ -13,3 +13,4 @@ frontend/tsconfig.tsbuildinfo
 
 # OS
 .DS_Store
+node_modules
